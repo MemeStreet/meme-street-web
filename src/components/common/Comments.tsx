@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import type { Comment } from '../../types';
-import { supabase } from '../../lib/supabase';
 import Button from './Button';
 
 interface CommentsProps {
@@ -16,44 +15,22 @@ const commentSchema = z.object({
 
 const Comments: React.FC<CommentsProps> = ({ postId }) => {
   const [comments, setComments] = useState<Comment[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const { register, handleSubmit, formState: { errors }, reset } = useForm();
-
-  useEffect(() => {
-    fetchComments();
-  }, [postId]);
-
-  const fetchComments = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('comments')
-        .select('*')
-        .eq('post_id', postId)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setComments(data || []);
-    } catch (error) {
-      console.error('Error fetching comments:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const onSubmit = async (data: any) => {
     try {
-      const { error } = await supabase
-        .from('comments')
-        .insert([{
-          post_id: postId,
-          user_name: data.user_name,
-          content: data.content,
-        }]);
-
-      if (error) throw error;
-
+      // Here you would typically send the comment to your backend
+      console.log('New comment:', data);
       reset();
-      fetchComments();
+      // For now, just add the comment to local state
+      setComments([{
+        id: Date.now().toString(),
+        post_id: postId,
+        user_name: data.user_name,
+        content: data.content,
+        created_at: new Date().toISOString()
+      }, ...comments]);
     } catch (error) {
       console.error('Error posting comment:', error);
       alert('Failed to post comment. Please try again.');
