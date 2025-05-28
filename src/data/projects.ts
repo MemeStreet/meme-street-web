@@ -20,7 +20,7 @@ const projects: Project[] = [
     id: '3',
     title: '$JAO Staking',
     description: 'Stake your $JAO tokens and earn rewards. Our staking mechanism is designed to incentivize long-term holding and discourage jeet behavior.',
-    image: 'https://images.pexels.com/photos/8370752/pexels-photo-8370752.jpeg',
+    image: 'jeet-zombie.png',
     status: 'development',
   },
   {
