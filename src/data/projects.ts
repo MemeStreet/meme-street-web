@@ -5,7 +5,7 @@ const projects: Project[] = [
     id: '1',
     title: 'Jeets Are Out ($JAO)',
     description: 'The first anti-jeet token that stands against pump and dump culture. $JAO is designed to protect genuine holders and build a sustainable community.',
-    image: '/images/jao-project.png',
+    image: '/images/IMAGE 2025-05-22 19:45:51.png',
     status: 'live',
     url: 'https://pancakeswap.finance/swap',
   },
