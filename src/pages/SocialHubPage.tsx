@@ -124,18 +124,18 @@ const SocialHubPage: React.FC = () => {
               <MessageCircle size={32} className="text-white" />
             </div>
             <h3 className="text-2xl md:text-3xl font-bold font-display mb-4">
-              Join Our Discord Community
+              Join Our Telegram Community
             </h3>
             <p className="text-white/90 max-w-2xl mx-auto mb-8">
-              Connect with developers, contributors, and fellow $JAO enthusiasts in our active Discord community. Get help, share ideas, and participate in exclusive events and giveaways.
+              Connect with developers, contributors, and fellow $JAO enthusiasts in our active Telegram community. Get help, share ideas, and participate in exclusive events and giveaways.
             </p>
             <a 
-              href="https://discord.gg/JeetsAreOut" 
+              href="https://t.me/+HruCP9oExMEyMGQ0" 
               target="_blank" 
               rel="noopener noreferrer"
               className="inline-flex items-center justify-center px-6 py-3 bg-white text-primary-600 font-medium rounded-full hover:shadow-lg transition-all duration-300"
             >
-              Join Discord
+              Join Telegram
             </a>
           </div>
         </motion.section>
