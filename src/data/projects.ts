@@ -20,16 +20,9 @@ const projects: Project[] = [
     id: '3',
     title: '$JAO Staking',
     description: 'Stake your $JAO tokens and earn rewards. Our staking mechanism is designed to incentivize long-term holding and discourage jeet behavior.',
-    image: 'IMAGE 2025-05-22 19:45:59.png',
+    image: '/images/IMAGE 2025-05-22 19:45:59.png',
     status: 'development',
   },
-  {
-    id: '4',
-    title: 'MemeVault',
-    description: 'A specialized yield farming platform that allows $JAO holders to stake their tokens and earn rewards through various DeFi mechanisms.',
-    image: 'https://images.pexels.com/photos/8370800/pexels-photo-8370800.jpeg',
-    status: 'planned',
-  }
 ];
 
 export default projects;
