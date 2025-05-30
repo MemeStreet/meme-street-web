@@ -3,37 +3,77 @@ import { motion } from 'framer-motion';
 import SectionHeading from '../components/common/SectionHeading';
 import SocialCard from '../components/common/SocialCard';
 import socialLinks from '../data/social';
-import { MessageCircle } from 'lucide-react';
+import { MessageCircle, Twitter } from 'lucide-react';
+
+declare global {
+  interface Window {
+    twttr: any;
+  }
+}
 
 const SocialHubPage: React.FC = () => {
   const twitterRef = useRef<HTMLDivElement>(null);
+  const [isTwitterLoaded, setIsTwitterLoaded] = React.useState(false);
 
   useEffect(() => {
-    // Remove any existing Twitter widgets
-    if (twitterRef.current) {
-      twitterRef.current.innerHTML = '';
+    // Function to initialize Twitter timeline
+    const initializeTwitter = () => {
+      if (window.twttr && window.twttr.widgets && twitterRef.current) {
+        // Clear any existing content
+        twitterRef.current.innerHTML = '';
+        
+        // Create timeline
+        window.twttr.widgets.createTimeline(
+          {
+            sourceType: 'profile',
+            screenName: 'Jeets_AreOut'
+          },
+          twitterRef.current,
+          {
+            height: 600,
+            theme: 'dark',
+            chrome: 'noheader nofooter noborders',
+            dnt: true,
+            tweetLimit: 5
+          }
+        ).then(() => {
+          setIsTwitterLoaded(true);
+        }).catch((error: any) => {
+          console.error('Error creating Twitter timeline:', error);
+          setIsTwitterLoaded(true); // Set to true even on error to show fallback
+        });
+      }
+    };
+
+    // Check if Twitter widgets are already available
+    if (window.twttr && window.twttr.widgets) {
+      initializeTwitter();
+    } else {
+      // Load Twitter widgets script
+      const script = document.createElement('script');
+      script.src = 'https://platform.twitter.com/widgets.js';
+      script.async = true;
+      
+      script.onload = () => {
+        // Wait for twttr to be fully initialized
+        if (window.twttr && window.twttr.ready) {
+          window.twttr.ready(() => {
+            initializeTwitter();
+          });
+        }
+      };
+
+      script.onerror = () => {
+        console.error('Failed to load Twitter widgets');
+        setIsTwitterLoaded(true); // Show fallback
+      };
+
+      document.body.appendChild(script);
     }
 
-    // Create and append new Twitter timeline widget
-    const script = document.createElement('script');
-    script.setAttribute('src', 'https://platform.twitter.com/widgets.js');
-    script.setAttribute('async', 'true');
-    document.head.appendChild(script);
-
-    // Create the Twitter Timeline
-    if (twitterRef.current) {
-      const timeline = document.createElement('a');
-      timeline.className = 'twitter-timeline';
-      timeline.setAttribute('data-height', '600');
-      timeline.setAttribute('data-theme', 'dark');
-      timeline.setAttribute('href', 'https://twitter.com/Jeets_AreOut');
-      timeline.textContent = 'Tweets by Jeets Are Out';
-      twitterRef.current.appendChild(timeline);
-    }
-
+    // Cleanup function
     return () => {
-      // Cleanup
-      document.head.removeChild(script);
+      // Don't remove the script as it might be used by other components
     };
   }, []);
 
@@ -89,7 +129,31 @@ const SocialHubPage: React.FC = () => {
           />
 
           <div className="bg-white dark:bg-dark-800 rounded-xl shadow-md p-6">
-            <div ref={twitterRef} className="flex justify-center min-h-[600px]" />
+            {!isTwitterLoaded && (
+              <div className="flex flex-col items-center justify-center min-h-[600px] text-gray-500 dark:text-gray-400">
+                <Twitter className="w-12 h-12 mb-4 animate-pulse" />
+                <p>Loading Twitter feed...</p>
+              </div>
+            )}
+            
+            <div ref={twitterRef} className="min-h-[200px]">
+              {/* Twitter timeline will be injected here */}
+            </div>
+            
+            {/* Fallback link */}
+            {isTwitterLoaded && (
+              <div className="mt-4 text-center">
+                <a 
+                  href="https://twitter.com/Jeets_AreOut" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 font-medium"
+                >
+                  <Twitter className="w-4 h-4" />
+                  Follow @Jeets_AreOut on Twitter
+                </a>
+              </div>
+            )}
           </div>
         </motion.section>
 
