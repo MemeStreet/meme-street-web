@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import SectionHeading from '../components/common/SectionHeading';
 import SocialCard from '../components/common/SocialCard';
@@ -6,11 +6,35 @@ import socialLinks from '../data/social';
 import { MessageCircle } from 'lucide-react';
 
 const SocialHubPage: React.FC = () => {
+  const twitterRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
-    // Reload Twitter widgets after component mounts
-    if ((window as any).twttr) {
-      (window as any).twttr.widgets.load();
+    // Remove any existing Twitter widgets
+    if (twitterRef.current) {
+      twitterRef.current.innerHTML = '';
     }
+
+    // Create and append new Twitter timeline widget
+    const script = document.createElement('script');
+    script.setAttribute('src', 'https://platform.twitter.com/widgets.js');
+    script.setAttribute('async', 'true');
+    document.head.appendChild(script);
+
+    // Create the Twitter Timeline
+    if (twitterRef.current) {
+      const timeline = document.createElement('a');
+      timeline.className = 'twitter-timeline';
+      timeline.setAttribute('data-height', '600');
+      timeline.setAttribute('data-theme', 'dark');
+      timeline.setAttribute('href', 'https://twitter.com/Jeets_AreOut');
+      timeline.textContent = 'Tweets by Jeets Are Out';
+      twitterRef.current.appendChild(timeline);
+    }
+
+    return () => {
+      // Cleanup
+      document.head.removeChild(script);
+    };
   }, []);
 
   return (
@@ -65,16 +89,7 @@ const SocialHubPage: React.FC = () => {
           />
 
           <div className="bg-white dark:bg-dark-800 rounded-xl shadow-md p-6">
-            <div className="flex justify-center">
-              <a 
-                className="twitter-timeline" 
-                data-height="600"
-                data-theme="dark"
-                href="https://twitter.com/Jeets_AreOut?ref_src=twsrc%5Etfw"
-              >
-                Tweets by Jeets Are Out
-              </a>
-            </div>
+            <div ref={twitterRef} className="flex justify-center min-h-[600px]" />
           </div>
         </motion.section>
 
