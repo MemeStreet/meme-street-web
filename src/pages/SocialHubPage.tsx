@@ -1,82 +1,11 @@
-import React, { useEffect, useRef } from 'react';
+import React from 'react';
 import { motion } from 'framer-motion';
 import SectionHeading from '../components/common/SectionHeading';
 import SocialCard from '../components/common/SocialCard';
 import socialLinks from '../data/social';
 import { MessageCircle, Twitter } from 'lucide-react';
 
-declare global {
-  interface Window {
-    twttr: any;
-  }
-}
-
 const SocialHubPage: React.FC = () => {
-  const twitterRef = useRef<HTMLDivElement>(null);
-  const [isTwitterLoaded, setIsTwitterLoaded] = React.useState(false);
-
-  useEffect(() => {
-    // Function to initialize Twitter timeline
-    const initializeTwitter = () => {
-      if (window.twttr && window.twttr.widgets && twitterRef.current) {
-        // Clear any existing content
-        twitterRef.current.innerHTML = '';
-        
-        // Create timeline
-        window.twttr.widgets.createTimeline(
-          {
-            sourceType: 'profile',
-            screenName: 'Jeets_AreOut'
-          },
-          twitterRef.current,
-          {
-            height: 600,
-            theme: 'dark',
-            chrome: 'noheader nofooter noborders',
-            dnt: true,
-            tweetLimit: 5
-          }
-        ).then(() => {
-          setIsTwitterLoaded(true);
-        }).catch((error: any) => {
-          console.error('Error creating Twitter timeline:', error);
-          setIsTwitterLoaded(true); // Set to true even on error to show fallback
-        });
-      }
-    };
-
-    // Check if Twitter widgets are already available
-    if (window.twttr && window.twttr.widgets) {
-      initializeTwitter();
-    } else {
-      // Load Twitter widgets script
-      const script = document.createElement('script');
-      script.src = 'https://platform.twitter.com/widgets.js';
-      script.async = true;
-      
-      script.onload = () => {
-        // Wait for twttr to be fully initialized
-        if (window.twttr && window.twttr.ready) {
-          window.twttr.ready(() => {
-            initializeTwitter();
-          });
-        }
-      };
-
-      script.onerror = () => {
-        console.error('Failed to load Twitter widgets');
-        setIsTwitterLoaded(true); // Show fallback
-      };
-
-      document.body.appendChild(script);
-    }
-
-    // Cleanup function
-    return () => {
-      // Don't remove the script as it might be used by other components
-    };
-  }, []);
-
   return (
     <div className="pt-32 pb-24">
       <div className="container mx-auto px-4">
@@ -128,32 +57,76 @@ const SocialHubPage: React.FC = () => {
             subtitle="Stay updated with our latest announcements and community interactions"
           />
 
-          <div className="bg-white dark:bg-dark-800 rounded-xl shadow-md p-6">
-            {!isTwitterLoaded && (
-              <div className="flex flex-col items-center justify-center min-h-[600px] text-gray-500 dark:text-gray-400">
-                <Twitter className="w-12 h-12 mb-4 animate-pulse" />
-                <p>Loading Twitter feed...</p>
+          <div className="bg-white dark:bg-dark-800 rounded-xl shadow-md overflow-hidden">
+            {/* Twitter Header */}
+            <div className="bg-gradient-to-r from-blue-400 to-blue-600 p-6 text-white">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center">
+                    <Twitter className="w-10 h-10 text-blue-500" />
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-bold">@Jeets_AreOut</h3>
+                    <p className="opacity-90">Follow us for the latest updates</p>
+                  </div>
+                </div>
               </div>
-            )}
-            
-            <div ref={twitterRef} className="min-h-[200px]">
-              {/* Twitter timeline will be injected here */}
             </div>
-            
-            {/* Fallback link */}
-            {isTwitterLoaded && (
-              <div className="mt-4 text-center">
-                <a 
-                  href="https://twitter.com/Jeets_AreOut" 
-                  target="_blank" 
+
+            {/* Twitter Content */}
+            <div className="p-8 text-center">
+              <p className="text-gray-600 dark:text-gray-300 mb-6">
+                Get real-time updates, announcements, and engage with our community on Twitter.
+              </p>
+              
+              <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                <a
+                  href="https://twitter.com/Jeets_AreOut"
+                  target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 font-medium"
+                  className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-blue-500 text-white font-medium rounded-lg hover:bg-blue-600 transition-colors"
                 >
-                  <Twitter className="w-4 h-4" />
-                  Follow @Jeets_AreOut on Twitter
+                  <Twitter className="w-5 h-5" />
+                  View Our Tweets
+                </a>
+                
+                <a
+                  href="https://twitter.com/intent/follow?screen_name=Jeets_AreOut"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white font-medium rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                >
+                  Follow @Jeets_AreOut
                 </a>
               </div>
-            )}
+
+              {/* Recent Tweet Preview (Static) */}
+              <div className="mt-8 p-6 bg-gray-50 dark:bg-dark-700 rounded-lg text-left max-w-2xl mx-auto">
+                <div className="flex items-start gap-3 mb-4">
+                  <div className="w-10 h-10 bg-primary-500 rounded-full flex items-center justify-center flex-shrink-0">
+                    <span className="text-white font-bold">J</span>
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-bold text-gray-900 dark:text-white">Jeets Are Out</span>
+                      <span className="text-gray-500 dark:text-gray-400">@Jeets_AreOut</span>
+                    </div>
+                    <p className="text-gray-700 dark:text-gray-300">
+                      🚀 Big things coming for $JAO! Stay tuned for our upcoming announcements. The community is stronger than ever! 
+                      #JAO #CryptoGems #MemeCoins
+                    </p>
+                  </div>
+                </div>
+                <a
+                  href="https://twitter.com/Jeets_AreOut"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
+                >
+                  View more tweets →
+                </a>
+              </div>
+            </div>
           </div>
         </motion.section>
 
