@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import SectionHeading from '../components/common/SectionHeading';
 import SocialCard from '../components/common/SocialCard';
@@ -6,6 +6,13 @@ import socialLinks from '../data/social';
 import { MessageCircle } from 'lucide-react';
 
 const SocialHubPage: React.FC = () => {
+  useEffect(() => {
+    // Reload Twitter widgets after component mounts
+    if ((window as any).twttr) {
+      (window as any).twttr.widgets.load();
+    }
+  }, []);
+
   return (
     <div className="pt-32 pb-24">
       <div className="container mx-auto px-4">
@@ -58,10 +65,15 @@ const SocialHubPage: React.FC = () => {
           />
 
           <div className="bg-white dark:bg-dark-800 rounded-xl shadow-md p-6">
-            <div className="h-96 bg-gray-100 dark:bg-dark-700 rounded-lg flex items-center justify-center">
-              <p className="text-gray-500 dark:text-gray-400">
-                Twitter feed will be embedded here
-              </p>
+            <div className="flex justify-center">
+              <a 
+                className="twitter-timeline" 
+                data-height="600"
+                data-theme="dark"
+                href="https://twitter.com/jeetareout?ref_src=twsrc%5Etfw"
+              >
+                Tweets by Meme Street Development
+              </a>
             </div>
           </div>
         </motion.section>
