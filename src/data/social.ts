@@ -3,7 +3,7 @@ import { SocialLink } from '../types';
 const socialLinks: SocialLink[] = [
   {
     platform: 'JAO Twitter',
-    url: 'https://x.com/jeetareout?s=11&t=A3YvcsokGH42-rk1hwZ7KA',
+    url: 'https://x.com/Jeets_AreOut',
     icon: 'Twitter',
   },
   {
