@@ -70,9 +70,9 @@ const SocialHubPage: React.FC = () => {
                 className="twitter-timeline" 
                 data-height="600"
                 data-theme="dark"
-                href="https://twitter.com/jeetareout?ref_src=twsrc%5Etfw"
+                href="https://twitter.com/Jeets_AreOut?ref_src=twsrc%5Etfw"
               >
-                Tweets by Meme Street Development
+                Tweets by Jeets Are Out
               </a>
             </div>
           </div>
