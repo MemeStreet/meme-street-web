@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -7,44 +7,95 @@ const supabase = createClient(
 );
 
 const TestSupabase: React.FC = () => {
-  const [status, setStatus] = useState<string>('Testing connection...');
+  const [pools, setPools] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const testConnection = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('test')
-          .select('*')
-          .limit(1);
-
-        if (error) {
-          setStatus(`Connection error: ${error.message}`);
-          console.error('Supabase connection error:', error);
-        } else {
-          setStatus('Successfully connected to Supabase!');
-          console.log('Test data:', data);
-        }
-      } catch (err) {
-        setStatus(`Unexpected error: ${err instanceof Error ? err.message : String(err)}`);
-        console.error('Unexpected error:', err);
-      }
-    };
-
-    testConnection();
+    fetchPools();
   }, []);
+
+  const fetchPools = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('staking_pools')
+        .select('*');
+      
+      if (error) {
+        setError(error.message);
+        console.error('Error:', error);
+      } else {
+        setPools(data || []);
+        console.log('Pools loaded:', data);
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      setError(errorMessage);
+      console.error('Error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="p-4 bg-white dark:bg-dark-800 rounded-lg shadow">
+        <div className="animate-pulse text-gray-600 dark:text-gray-400">Loading...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-4 bg-white dark:bg-dark-800 rounded-lg shadow">
+        <div className="text-red-600 dark:text-red-400">Error: {error}</div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 bg-white dark:bg-dark-800 rounded-lg shadow">
-      <h2 className="text-xl font-bold mb-4">Supabase Connection Test</h2>
-      <p className={`${
-        status.includes('error') 
-          ? 'text-red-600 dark:text-red-400' 
-          : status.includes('Success')
-          ? 'text-green-600 dark:text-green-400'
-          : 'text-gray-600 dark:text-gray-400'
-      }`}>
-        {status}
-      </p>
+      <h2 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white">JAO Staking Pools</h2>
+      <div className="grid gap-6">
+        {pools.map(pool => (
+          <div 
+            key={pool.id}
+            className="border border-gray-200 dark:border-gray-700 rounded-lg p-6 hover:shadow-lg transition-shadow"
+          >
+            <h3 className="text-xl font-semibold mb-2 text-gray-900 dark:text-white">
+              {pool.name}
+            </h3>
+            <p className="text-gray-600 dark:text-gray-300 mb-4">
+              {pool.description}
+            </p>
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <p className="text-sm text-gray-500 dark:text-gray-400">APY Rate</p>
+                <p className="text-lg font-semibold text-primary-600 dark:text-primary-400">
+                  {pool.apy_rate}%
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Minimum Stake</p>
+                <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                  {pool.min_stake_amount.toLocaleString()} JAO
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Lock Period</p>
+                <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                  {pool.lock_period_days} days
+                </p>
+              </div>
+            </div>
+          </div>
+        ))}
+        {pools.length === 0 && (
+          <p className="text-gray-600 dark:text-gray-400 text-center py-8">
+            No staking pools available at the moment.
+          </p>
+        )}
+      </div>
     </div>
   );
 };
