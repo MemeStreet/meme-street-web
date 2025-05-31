@@ -105,7 +105,7 @@ const Header: React.FC = () => {
                   </Link>
                 ))}
                 <a
-                  href="https://pancakeswap.finance/swap"
+                  href="https://dexscreener.com/solana/h4b45vgj5hlqmnujppaffy2z2uwry1xww8bvlom8lfgz"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="px-5 py-3 bg-gradient-to-r from-primary-600 to-accent-500 text-white font-medium rounded-full hover:shadow-lg transition-all duration-300 text-center"
