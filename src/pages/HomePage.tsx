@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import Button from '../components/common/Button';
 import SectionHeading from '../components/common/SectionHeading';
@@ -9,6 +9,7 @@ import { ArrowRight, Zap, BarChart3, Globe, Shield } from 'lucide-react';
 
 const HomePage: React.FC = () => {
   const featuredProjects = projects.slice(0, 2);
+  const navigate = useNavigate();
 
   return (
     <div className="flex flex-col">
@@ -64,9 +65,9 @@ const HomePage: React.FC = () => {
                 Buy $JAO Now
               </Button>
               <Button
-                href="/projects"
                 variant="outline"
                 size="lg"
+                onClick={() => navigate('/projects')}
               >
                 Explore Projects
               </Button>
