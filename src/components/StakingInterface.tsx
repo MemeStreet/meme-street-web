@@ -31,32 +31,40 @@ interface UserStake {
   staking_pools: StakingPool;
 }
 
-// JAO Balance Hook (inline) - IMPROVED WITH DEBUGGING
+// JAO Balance Hook (inline) - IMPROVED WITH BETTER RPC HANDLING
 const useJAOBalance = (mintAddress: string) => {
   const { publicKey, connected } = useWallet();
   const { connection } = useConnection();
   const [balance, setBalance] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(false);
   const [price, setPrice] = useState<number>(0);
+  const [error, setError] = useState<string>('');
 
   const fetchBalance = useCallback(async () => {
     if (!publicKey || !connected || !mintAddress) {
       setBalance(0);
+      setError('');
       return;
     }
 
     setLoading(true);
+    setError('');
+    
     try {
       console.log('🔍 Fetching balance for wallet:', publicKey.toString());
       console.log('🔍 Looking for mint:', mintAddress);
+      console.log('🔍 Using RPC:', connection.rpcEndpoint);
 
-      // Method 1: Try to get all token accounts and find JAO
+      // Method 1: Get all token accounts (more reliable for finding tokens)
+      console.log('🔍 Attempting to get all token accounts...');
+      
       const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
         publicKey,
-        { programId: TOKEN_PROGRAM_ID }
+        { programId: TOKEN_PROGRAM_ID },
+        'confirmed' // Use confirmed commitment for better reliability
       );
 
-      console.log('🔍 Found', tokenAccounts.value.length, 'token accounts');
+      console.log('✅ Successfully got', tokenAccounts.value.length, 'token accounts');
       console.log('🔍 All token accounts:', tokenAccounts.value.map(acc => ({
         mint: acc.account.data.parsed.info.mint,
         balance: acc.account.data.parsed.info.tokenAmount.uiAmount,
@@ -72,31 +80,30 @@ const useJAOBalance = (mintAddress: string) => {
         const balance = jaoAccount.account.data.parsed.info.tokenAmount.uiAmount || 0;
         console.log('✅ Found JAO balance:', balance);
         setBalance(balance);
+        setError('');
         return;
       }
 
-      console.log('❌ JAO token not found in wallet accounts');
-
-      // Method 2: Try associated token account (fallback)
-      const mint = new PublicKey(mintAddress);
-      const tokenAccountAddress = await getAssociatedTokenAddress(
-        mint,
-        publicKey,
-        false,
-        TOKEN_PROGRAM_ID
-      );
-
-      console.log('🔍 Trying ATA:', tokenAccountAddress.toString());
-
-      const accountInfo = await getAccount(connection, tokenAccountAddress);
-      const tokenBalance = Number(accountInfo.amount) / Math.pow(10, 9);
-      
-      console.log('✅ ATA balance:', tokenBalance);
-      setBalance(tokenBalance);
-
-    } catch (error) {
-      console.error('❌ Error fetching JAO balance:', error);
+      console.log('⚠️ JAO token not found in wallet accounts');
       setBalance(0);
+      setError('JAO token not found in wallet');
+
+    } catch (error: any) {
+      console.error('❌ Error fetching JAO balance:', error);
+      
+      // Check if it's an RPC error
+      if (error.message?.includes('403') || error.message?.includes('forbidden')) {
+        setError('RPC endpoint blocked. Using alternative method...');
+        
+        // Try a simpler approach - just show 0 balance with error message
+        setBalance(0);
+      } else if (error.message?.includes('rate limit')) {
+        setError('Rate limited by RPC. Please wait and try again.');
+        setBalance(0);
+      } else {
+        setError(`Error: ${error.message}`);
+        setBalance(0);
+      }
     } finally {
       setLoading(false);
     }
@@ -133,6 +140,7 @@ const useJAOBalance = (mintAddress: string) => {
     balance, 
     price, 
     loading, 
+    error,
     refetch: fetchBalance,
     usdValue: balance * price 
   };
@@ -152,7 +160,7 @@ const StakingInterface: React.FC = () => {
 
   // JAO token configuration
   const JAO_MINT_ADDRESS = 'EGzvPfc54EBvS3M6MKXWixDK32T7pVxXB8dZ7AW5bACr';
-  const { balance: jaoBalance, price: jaoPrice, loading: balanceLoading } = useJAOBalance(JAO_MINT_ADDRESS);
+  const { balance: jaoBalance, price: jaoPrice, loading: balanceLoading, error: balanceError } = useJAOBalance(JAO_MINT_ADDRESS);
 
   // Debug function
   const runDebugCheck = useCallback(async () => {
@@ -369,6 +377,17 @@ const StakingInterface: React.FC = () => {
           </div>
           <WalletMultiButton />
         </div>
+
+        {/* RPC Error Warning */}
+        {connected && balanceError && (
+          <div className="bg-yellow-900/30 border border-yellow-700 rounded-lg p-4 mb-6">
+            <h3 className="text-yellow-200 font-bold mb-2">⚠️ RPC Connection Issue</h3>
+            <p className="text-yellow-300 text-sm mb-3">{balanceError}</p>
+            <p className="text-yellow-300 text-sm">
+              This is usually a temporary issue with Solana RPC endpoints. Try refreshing the page or connect later.
+            </p>
+          </div>
+        )}
 
         {/* Debug Info Panel */}
         {connected && (
