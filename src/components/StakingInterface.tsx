@@ -31,7 +31,7 @@ interface UserStake {
   staking_pools: StakingPool;
 }
 
-// JAO Balance Hook (inline)
+// JAO Balance Hook (inline) - IMPROVED WITH DEBUGGING
 const useJAOBalance = (mintAddress: string) => {
   const { publicKey, connected } = useWallet();
   const { connection } = useConnection();
@@ -47,9 +47,38 @@ const useJAOBalance = (mintAddress: string) => {
 
     setLoading(true);
     try {
+      console.log('🔍 Fetching balance for wallet:', publicKey.toString());
+      console.log('🔍 Looking for mint:', mintAddress);
+
+      // Method 1: Try to get all token accounts and find JAO
+      const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
+        publicKey,
+        { programId: TOKEN_PROGRAM_ID }
+      );
+
+      console.log('🔍 Found', tokenAccounts.value.length, 'token accounts');
+      console.log('🔍 All token accounts:', tokenAccounts.value.map(acc => ({
+        mint: acc.account.data.parsed.info.mint,
+        balance: acc.account.data.parsed.info.tokenAmount.uiAmount,
+        decimals: acc.account.data.parsed.info.tokenAmount.decimals
+      })));
+
+      // Look for the JAO token in all accounts
+      const jaoAccount = tokenAccounts.value.find(
+        account => account.account.data.parsed.info.mint === mintAddress
+      );
+
+      if (jaoAccount) {
+        const balance = jaoAccount.account.data.parsed.info.tokenAmount.uiAmount || 0;
+        console.log('✅ Found JAO balance:', balance);
+        setBalance(balance);
+        return;
+      }
+
+      console.log('❌ JAO token not found in wallet accounts');
+
+      // Method 2: Try associated token account (fallback)
       const mint = new PublicKey(mintAddress);
-      
-      // Get associated token account
       const tokenAccountAddress = await getAssociatedTokenAddress(
         mint,
         publicKey,
@@ -57,13 +86,16 @@ const useJAOBalance = (mintAddress: string) => {
         TOKEN_PROGRAM_ID
       );
 
-      // Get account info
+      console.log('🔍 Trying ATA:', tokenAccountAddress.toString());
+
       const accountInfo = await getAccount(connection, tokenAccountAddress);
-      const tokenBalance = Number(accountInfo.amount) / Math.pow(10, 9); // 9 decimals for JAO
+      const tokenBalance = Number(accountInfo.amount) / Math.pow(10, 9);
       
+      console.log('✅ ATA balance:', tokenBalance);
       setBalance(tokenBalance);
+
     } catch (error) {
-      console.error('Error fetching JAO balance:', error);
+      console.error('❌ Error fetching JAO balance:', error);
       setBalance(0);
     } finally {
       setLoading(false);
@@ -108,23 +140,93 @@ const useJAOBalance = (mintAddress: string) => {
 
 const StakingInterface: React.FC = () => {
   const { connected, publicKey } = useWallet();
+  const { connection } = useConnection();
   const { user, profile, updateProfile } = useAuth();
   const [stakingPools, setStakingPools] = useState<StakingPool[]>([]);
   const [userStakes, setUserStakes] = useState<UserStake[]>([]);
   const [selectedPool, setSelectedPool] = useState<string | null>(null);
   const [stakeAmount, setStakeAmount] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
+  const [debugInfo, setDebugInfo] = useState<any>({});
+  const [allTokenAccounts, setAllTokenAccounts] = useState<any[]>([]);
 
   // JAO token configuration
   const JAO_MINT_ADDRESS = 'EGzvPfc54EBvS3M6MKXWixDK32T7pVxXB8dZ7AW5bACr';
   const { balance: jaoBalance, price: jaoPrice, loading: balanceLoading } = useJAOBalance(JAO_MINT_ADDRESS);
+
+  // Debug function
+  const runDebugCheck = useCallback(async () => {
+    if (!publicKey || !connected) {
+      setDebugInfo({});
+      setAllTokenAccounts([]);
+      return;
+    }
+
+    try {
+      setDebugInfo({ status: 'Checking...' });
+
+      console.log('🚀 Starting debug check...');
+      console.log('Wallet connected:', connected);
+      console.log('Public key:', publicKey.toString());
+      console.log('JAO Mint Address:', JAO_MINT_ADDRESS);
+
+      // Get all token accounts for this wallet
+      const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
+        publicKey,
+        { programId: TOKEN_PROGRAM_ID }
+      );
+
+      console.log('All token accounts:', tokenAccounts);
+      setAllTokenAccounts(tokenAccounts.value);
+
+      // Look for JAO specifically
+      const jaoAccount = tokenAccounts.value.find(
+        account => account.account.data.parsed.info.mint === JAO_MINT_ADDRESS
+      );
+
+      console.log('JAO Account:', jaoAccount);
+
+      // Try to get associated token account
+      const mint = new PublicKey(JAO_MINT_ADDRESS);
+      const ata = await getAssociatedTokenAddress(
+        mint,
+        publicKey,
+        false,
+        TOKEN_PROGRAM_ID
+      );
+
+      console.log('Expected ATA:', ata.toString());
+
+      // Check if ATA exists
+      const ataInfo = await connection.getAccountInfo(ata);
+      console.log('ATA exists:', !!ataInfo);
+
+      setDebugInfo({
+        status: 'Complete',
+        walletAddress: publicKey.toString(),
+        mintAddress: JAO_MINT_ADDRESS,
+        expectedATA: ata.toString(),
+        ataExists: !!ataInfo,
+        jaoAccountFound: !!jaoAccount,
+        jaoBalance: jaoAccount ? jaoAccount.account.data.parsed.info.tokenAmount.uiAmount : 0,
+        totalTokenAccounts: tokenAccounts.value.length
+      });
+
+    } catch (error) {
+      console.error('Debug error:', error);
+      setDebugInfo({ status: 'Error', error: error.message });
+    }
+  }, [publicKey, connected, connection, JAO_MINT_ADDRESS]);
 
   useEffect(() => {
     fetchStakingPools();
     if (user) {
       fetchUserStakes();
     }
-  }, [user]);
+    if (connected) {
+      runDebugCheck();
+    }
+  }, [user, connected, runDebugCheck]);
 
   useEffect(() => {
     // Update profile with wallet address when wallet connects
@@ -267,6 +369,83 @@ const StakingInterface: React.FC = () => {
           </div>
           <WalletMultiButton />
         </div>
+
+        {/* Debug Info Panel */}
+        {connected && (
+          <div className="bg-red-900/30 border border-red-700 rounded-lg p-6 mb-8">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-red-200 font-bold">🔍 Balance Debug Info</h3>
+              <button
+                onClick={runDebugCheck}
+                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded text-sm"
+              >
+                Refresh Debug
+              </button>
+            </div>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="bg-gray-800 p-4 rounded">
+                <h4 className="text-white font-semibold mb-2">Connection Status:</h4>
+                <div className="space-y-1 text-sm">
+                  <p className="text-gray-300">Status: {debugInfo.status || 'Not checked'}</p>
+                  <p className="text-gray-300">Wallet: {debugInfo.walletAddress?.slice(0, 12)}...</p>
+                  <p className="text-gray-300">JAO Mint: {debugInfo.mintAddress?.slice(0, 12)}...</p>
+                  <p className="text-gray-300">Expected ATA: {debugInfo.expectedATA?.slice(0, 12)}...</p>
+                  <p className={`${debugInfo.ataExists ? 'text-green-400' : 'text-red-400'}`}>
+                    ATA Exists: {debugInfo.ataExists ? '✅' : '❌'}
+                  </p>
+                  <p className={`${debugInfo.jaoAccountFound ? 'text-green-400' : 'text-red-400'}`}>
+                    JAO Account Found: {debugInfo.jaoAccountFound ? '✅' : '❌'}
+                  </p>
+                  <p className="text-yellow-400">JAO Balance: {debugInfo.jaoBalance || '0'}</p>
+                  <p className="text-gray-300">Total Token Accounts: {debugInfo.totalTokenAccounts}</p>
+                </div>
+              </div>
+
+              <div className="bg-gray-800 p-4 rounded">
+                <h4 className="text-white font-semibold mb-2">All Your Tokens:</h4>
+                <div className="max-h-40 overflow-y-auto space-y-1">
+                  {allTokenAccounts.length === 0 ? (
+                    <p className="text-gray-400 text-sm">No token accounts found</p>
+                  ) : (
+                    allTokenAccounts.map((account, i) => (
+                      <div key={i} className="text-xs">
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-400">
+                            {account.account.data.parsed.info.mint.slice(0, 8)}...
+                          </span>
+                          <span className="text-white">
+                            {account.account.data.parsed.info.tokenAmount.uiAmount || 0}
+                          </span>
+                        </div>
+                        {account.account.data.parsed.info.mint === JAO_MINT_ADDRESS && (
+                          <div className="text-green-400 text-xs">↑ This is your JAO token! ✅</div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {!debugInfo.jaoAccountFound && allTokenAccounts.length > 0 && (
+              <div className="mt-4 p-3 bg-yellow-900/30 border border-yellow-700 rounded">
+                <p className="text-yellow-200 text-sm">
+                  🤔 <strong>Issue Found:</strong> You have {allTokenAccounts.length} token(s) but none match the JAO mint address.
+                  Your JAO tokens might have a different mint address.
+                </p>
+              </div>
+            )}
+
+            {debugInfo.jaoAccountFound && debugInfo.jaoBalance === 0 && (
+              <div className="mt-4 p-3 bg-blue-900/30 border border-blue-700 rounded">
+                <p className="text-blue-200 text-sm">
+                  ℹ️ <strong>Found JAO account but balance is 0.</strong> You have the right token but no balance.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Stats Overview */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
