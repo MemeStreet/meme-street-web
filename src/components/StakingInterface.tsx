@@ -1,12 +1,92 @@
 // src/components/StakingInterface.tsx
 import React, { useState, useEffect, useCallback } from 'react';
-import { useWallet, useConnection } from '@solana/wallet-adapter-react';
+import { useWallet } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
-import { PublicKey } from '@solana/web3.js';
+import { PublicKey, Connection } from '@solana/web3.js';
 import { getAccount, getAssociatedTokenAddress, TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { Coins, TrendingUp, Lock, Wallet, Gift, Users } from 'lucide-react';
+
+// RPC MANAGER - Fixed for better endpoint handling
+class RPCManager {
+  private endpoints: string[] = [
+    'https://solana-api.projectserum.com',      // Most reliable when mainnet fails
+    'https://ssc-dao.genesysgo.net',           // GenesysGo (high performance)
+    'https://solana-mainnet.rpc.chainstack.com', // Chainstack
+    'https://solana.rpcpool.com',              // RPC Pool
+    'https://api.mainnet-beta.solana.com'      // Official (try as backup)
+  ];
+  private currentIndex: number = 0;
+  private workingConnection: Connection | null = null;
+
+  async getConnection(): Promise<Connection> {
+    // If we have a working connection, test it first
+    if (this.workingConnection) {
+      try {
+        await Promise.race([
+          this.workingConnection.getLatestBlockhash(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
+        ]);
+        return this.workingConnection;
+      } catch (error) {
+        console.log('Previous connection failed, finding new one...');
+        this.workingConnection = null;
+      }
+    }
+
+    // Find a working endpoint
+    for (let i = 0; i < this.endpoints.length; i++) {
+      try {
+        const endpoint = this.endpoints[this.currentIndex];
+        console.log(`🧪 Testing RPC: ${endpoint}`);
+        
+        const connection = new Connection(endpoint, 'confirmed');
+        
+        // Quick test with timeout
+        await Promise.race([
+          connection.getLatestBlockhash(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
+        ]);
+        
+        console.log(`✅ Connected to: ${endpoint}`);
+        this.workingConnection = connection;
+        return connection;
+        
+      } catch (error) {
+        console.log(`❌ Failed: ${this.endpoints[this.currentIndex]}`);
+        this.currentIndex = (this.currentIndex + 1) % this.endpoints.length;
+      }
+    }
+    
+    throw new Error('All RPC endpoints failed');
+  }
+
+  async executeWithRetry<T>(operation: (connection: Connection) => Promise<T>): Promise<T> {
+    let lastError: Error | null = null;
+    
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const connection = await this.getConnection();
+        return await operation(connection);
+      } catch (error) {
+        lastError = error as Error;
+        console.warn(`Attempt ${attempt + 1} failed:`, error);
+        this.workingConnection = null; // Force reconnection
+        
+        if (attempt < 2) {
+          await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+        }
+      }
+    }
+    
+    throw lastError || new Error('All retry attempts failed');
+  }
+
+  getCurrentEndpoint(): string {
+    return this.endpoints[this.currentIndex];
+  }
+}
 
 interface StakingPool {
   id: string;
@@ -31,14 +111,15 @@ interface UserStake {
   staking_pools: StakingPool;
 }
 
-// JAO Balance Hook (inline) - IMPROVED WITH BETTER RPC HANDLING
+// IMPROVED JAO Balance Hook with RPC Fallback
 const useJAOBalance = (mintAddress: string) => {
   const { publicKey, connected } = useWallet();
-  const { connection } = useConnection();
   const [balance, setBalance] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(false);
   const [price, setPrice] = useState<number>(0);
   const [error, setError] = useState<string>('');
+  const [rpcManager] = useState(() => new RPCManager());
+  const [currentRPC, setCurrentRPC] = useState<string>('');
 
   const fetchBalance = useCallback(async () => {
     if (!publicKey || !connected || !mintAddress) {
@@ -53,72 +134,75 @@ const useJAOBalance = (mintAddress: string) => {
     try {
       console.log('🔍 Fetching balance for wallet:', publicKey.toString());
       console.log('🔍 Looking for mint:', mintAddress);
-      console.log('🔍 Using RPC:', connection.rpcEndpoint);
 
-      // Method 1: Get all token accounts (more reliable for finding tokens)
-      console.log('🔍 Attempting to get all token accounts...');
+      const result = await rpcManager.executeWithRetry(async (connection) => {
+        setCurrentRPC(connection.rpcEndpoint);
+        console.log('🔍 Using RPC:', connection.rpcEndpoint);
+
+        // Get all token accounts
+        const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
+          publicKey,
+          { programId: TOKEN_PROGRAM_ID },
+          'confirmed'
+        );
+
+        console.log('✅ Successfully got', tokenAccounts.value.length, 'token accounts');
+        
+        // Look for the JAO token
+        const jaoAccount = tokenAccounts.value.find(
+          account => account.account.data.parsed.info.mint === mintAddress
+        );
+
+        if (jaoAccount) {
+          const balance = jaoAccount.account.data.parsed.info.tokenAmount.uiAmount || 0;
+          console.log('✅ Found JAO balance:', balance);
+          return { balance, found: true, totalAccounts: tokenAccounts.value.length };
+        }
+
+        console.log('⚠️ JAO token not found in wallet accounts');
+        return { balance: 0, found: false, totalAccounts: tokenAccounts.value.length };
+      });
+
+      setBalance(result.balance);
       
-      const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
-        publicKey,
-        { programId: TOKEN_PROGRAM_ID },
-        'confirmed' // Use confirmed commitment for better reliability
-      );
-
-      console.log('✅ Successfully got', tokenAccounts.value.length, 'token accounts');
-      console.log('🔍 All token accounts:', tokenAccounts.value.map(acc => ({
-        mint: acc.account.data.parsed.info.mint,
-        balance: acc.account.data.parsed.info.tokenAmount.uiAmount,
-        decimals: acc.account.data.parsed.info.tokenAmount.decimals
-      })));
-
-      // Look for the JAO token in all accounts
-      const jaoAccount = tokenAccounts.value.find(
-        account => account.account.data.parsed.info.mint === mintAddress
-      );
-
-      if (jaoAccount) {
-        const balance = jaoAccount.account.data.parsed.info.tokenAmount.uiAmount || 0;
-        console.log('✅ Found JAO balance:', balance);
-        setBalance(balance);
+      if (!result.found && result.totalAccounts > 0) {
+        setError(`JAO token not found. You have ${result.totalAccounts} other tokens.`);
+      } else if (!result.found) {
+        setError('No tokens found in wallet');
+      } else {
         setError('');
-        return;
       }
-
-      console.log('⚠️ JAO token not found in wallet accounts');
-      setBalance(0);
-      setError('JAO token not found in wallet');
 
     } catch (error: any) {
       console.error('❌ Error fetching JAO balance:', error);
-      
-      // Check if it's an RPC error
-      if (error.message?.includes('403') || error.message?.includes('forbidden')) {
-        setError('RPC endpoint blocked. Using alternative method...');
-        
-        // Try a simpler approach - just show 0 balance with error message
-        setBalance(0);
-      } else if (error.message?.includes('rate limit')) {
-        setError('Rate limited by RPC. Please wait and try again.');
-        setBalance(0);
-      } else {
-        setError(`Error: ${error.message}`);
-        setBalance(0);
-      }
+      setError(`Connection failed: ${error.message}`);
+      setBalance(0);
     } finally {
       setLoading(false);
     }
-  }, [publicKey, connected, mintAddress, connection]);
+  }, [publicKey, connected, mintAddress, rpcManager]);
 
   const fetchPrice = useCallback(async () => {
     try {
+      // Try DexScreener API
       const response = await fetch(
-        `https://api.dexscreener.com/latest/dex/tokens/${mintAddress}`
+        `https://api.dexscreener.com/latest/dex/tokens/${mintAddress}`,
+        { 
+          method: 'GET',
+          headers: { 'Accept': 'application/json' }
+        }
       );
-      const data = await response.json();
       
-      if (data.pairs && data.pairs.length > 0) {
-        setPrice(parseFloat(data.pairs[0].priceUsd || '0'));
+      if (response.ok) {
+        const data = await response.json();
+        if (data.pairs && data.pairs.length > 0) {
+          setPrice(parseFloat(data.pairs[0].priceUsd || '0'));
+          return;
+        }
       }
+      
+      // Fallback: set a default price or keep existing
+      console.log('Price fetch failed, keeping current price');
     } catch (error) {
       console.error('Error fetching token price:', error);
     }
@@ -131,7 +215,7 @@ const useJAOBalance = (mintAddress: string) => {
     const interval = setInterval(() => {
       fetchBalance();
       fetchPrice();
-    }, 30000); // Refresh every 30 seconds
+    }, 30000);
     
     return () => clearInterval(interval);
   }, [fetchBalance, fetchPrice]);
@@ -142,13 +226,13 @@ const useJAOBalance = (mintAddress: string) => {
     loading, 
     error,
     refetch: fetchBalance,
-    usdValue: balance * price 
+    usdValue: balance * price,
+    currentRPC
   };
 };
 
 const StakingInterface: React.FC = () => {
   const { connected, publicKey } = useWallet();
-  const { connection } = useConnection();
   const { user, profile, updateProfile } = useAuth();
   const [stakingPools, setStakingPools] = useState<StakingPool[]>([]);
   const [userStakes, setUserStakes] = useState<UserStake[]>([]);
@@ -157,12 +241,20 @@ const StakingInterface: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [debugInfo, setDebugInfo] = useState<any>({});
   const [allTokenAccounts, setAllTokenAccounts] = useState<any[]>([]);
+  const [rpcManager] = useState(() => new RPCManager());
 
   // JAO token configuration
   const JAO_MINT_ADDRESS = 'EGzvPfc54EBvS3M6MKXWixDK32T7pVxXB8dZ7AW5bACr';
-  const { balance: jaoBalance, price: jaoPrice, loading: balanceLoading, error: balanceError } = useJAOBalance(JAO_MINT_ADDRESS);
+  const { 
+    balance: jaoBalance, 
+    price: jaoPrice, 
+    loading: balanceLoading, 
+    error: balanceError,
+    refetch: refetchBalance,
+    currentRPC 
+  } = useJAOBalance(JAO_MINT_ADDRESS);
 
-  // Debug function
+  // Enhanced debug function with RPC fallback
   const runDebugCheck = useCallback(async () => {
     if (!publicKey || !connected) {
       setDebugInfo({});
@@ -173,58 +265,60 @@ const StakingInterface: React.FC = () => {
     try {
       setDebugInfo({ status: 'Checking...' });
 
-      console.log('🚀 Starting debug check...');
-      console.log('Wallet connected:', connected);
-      console.log('Public key:', publicKey.toString());
-      console.log('JAO Mint Address:', JAO_MINT_ADDRESS);
+      const result = await rpcManager.executeWithRetry(async (connection) => {
+        console.log('🚀 Starting debug check with RPC:', connection.rpcEndpoint);
 
-      // Get all token accounts for this wallet
-      const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
-        publicKey,
-        { programId: TOKEN_PROGRAM_ID }
-      );
+        // Get all token accounts
+        const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
+          publicKey,
+          { programId: TOKEN_PROGRAM_ID }
+        );
 
-      console.log('All token accounts:', tokenAccounts);
-      setAllTokenAccounts(tokenAccounts.value);
+        setAllTokenAccounts(tokenAccounts.value);
 
-      // Look for JAO specifically
-      const jaoAccount = tokenAccounts.value.find(
-        account => account.account.data.parsed.info.mint === JAO_MINT_ADDRESS
-      );
+        // Look for JAO specifically
+        const jaoAccount = tokenAccounts.value.find(
+          account => account.account.data.parsed.info.mint === JAO_MINT_ADDRESS
+        );
 
-      console.log('JAO Account:', jaoAccount);
+        // Try to get associated token account
+        const mint = new PublicKey(JAO_MINT_ADDRESS);
+        const ata = await getAssociatedTokenAddress(
+          mint,
+          publicKey,
+          false,
+          TOKEN_PROGRAM_ID
+        );
 
-      // Try to get associated token account
-      const mint = new PublicKey(JAO_MINT_ADDRESS);
-      const ata = await getAssociatedTokenAddress(
-        mint,
-        publicKey,
-        false,
-        TOKEN_PROGRAM_ID
-      );
+        // Check if ATA exists
+        const ataInfo = await connection.getAccountInfo(ata);
 
-      console.log('Expected ATA:', ata.toString());
-
-      // Check if ATA exists
-      const ataInfo = await connection.getAccountInfo(ata);
-      console.log('ATA exists:', !!ataInfo);
+        return {
+          rpcEndpoint: connection.rpcEndpoint,
+          walletAddress: publicKey.toString(),
+          mintAddress: JAO_MINT_ADDRESS,
+          expectedATA: ata.toString(),
+          ataExists: !!ataInfo,
+          jaoAccountFound: !!jaoAccount,
+          jaoBalance: jaoAccount ? jaoAccount.account.data.parsed.info.tokenAmount.uiAmount : 0,
+          totalTokenAccounts: tokenAccounts.value.length
+        };
+      });
 
       setDebugInfo({
         status: 'Complete',
-        walletAddress: publicKey.toString(),
-        mintAddress: JAO_MINT_ADDRESS,
-        expectedATA: ata.toString(),
-        ataExists: !!ataInfo,
-        jaoAccountFound: !!jaoAccount,
-        jaoBalance: jaoAccount ? jaoAccount.account.data.parsed.info.tokenAmount.uiAmount : 0,
-        totalTokenAccounts: tokenAccounts.value.length
+        ...result
       });
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Debug error:', error);
-      setDebugInfo({ status: 'Error', error: error.message });
+      setDebugInfo({ 
+        status: 'Error', 
+        error: error.message,
+        rpcEndpoint: 'Failed to connect'
+      });
     }
-  }, [publicKey, connected, connection, JAO_MINT_ADDRESS]);
+  }, [publicKey, connected, rpcManager, JAO_MINT_ADDRESS]);
 
   useEffect(() => {
     fetchStakingPools();
@@ -237,7 +331,6 @@ const StakingInterface: React.FC = () => {
   }, [user, connected, runDebugCheck]);
 
   useEffect(() => {
-    // Update profile with wallet address when wallet connects
     if (connected && publicKey && user && profile?.wallet_address !== publicKey.toString()) {
       updateProfile({ wallet_address: publicKey.toString() });
     }
@@ -328,7 +421,7 @@ const StakingInterface: React.FC = () => {
         .eq('id', poolId);
 
       // Refresh data
-      await Promise.all([fetchStakingPools(), fetchUserStakes()]);
+      await Promise.all([fetchStakingPools(), fetchUserStakes(), refetchBalance()]);
       
       setStakeAmount('');
       setSelectedPool(null);
@@ -378,25 +471,54 @@ const StakingInterface: React.FC = () => {
           <WalletMultiButton />
         </div>
 
-        {/* RPC Error Warning */}
-        {connected && balanceError && (
-          <div className="bg-yellow-900/30 border border-yellow-700 rounded-lg p-4 mb-6">
-            <h3 className="text-yellow-200 font-bold mb-2">⚠️ RPC Connection Issue</h3>
-            <p className="text-yellow-300 text-sm mb-3">{balanceError}</p>
-            <p className="text-yellow-300 text-sm">
-              This is usually a temporary issue with Solana RPC endpoints. Try refreshing the page or connect later.
-            </p>
+        {/* RPC Status */}
+        {connected && (
+          <div className="bg-green-900/30 border border-green-700 rounded-lg p-4 mb-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-green-200 font-bold">✅ RPC Connection Status</h3>
+                <p className="text-green-300 text-sm">Connected to: {currentRPC || debugInfo.rpcEndpoint || 'Connecting...'}</p>
+              </div>
+              <button
+                onClick={() => { refetchBalance(); runDebugCheck(); }}
+                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm"
+              >
+                Refresh Connection
+              </button>
+            </div>
           </div>
         )}
 
-        {/* Debug Info Panel */}
-        {connected && (
-          <div className="bg-red-900/30 border border-red-700 rounded-lg p-6 mb-8">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-red-200 font-bold">🔍 Balance Debug Info</h3>
+        {/* RPC Error Warning */}
+        {connected && balanceError && (
+          <div className="bg-yellow-900/30 border border-yellow-700 rounded-lg p-4 mb-6">
+            <h3 className="text-yellow-200 font-bold mb-2">⚠️ Connection Issue</h3>
+            <p className="text-yellow-300 text-sm mb-3">{balanceError}</p>
+            <div className="flex gap-2">
+              <button
+                onClick={refetchBalance}
+                className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded text-sm"
+              >
+                Retry Connection
+              </button>
               <button
                 onClick={runDebugCheck}
-                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded text-sm"
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm"
+              >
+                Run Diagnostics
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Improved Debug Panel */}
+        {connected && debugInfo.status && (
+          <div className="bg-gray-900/50 border border-gray-700 rounded-lg p-6 mb-8">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-gray-200 font-bold">🔍 Connection Diagnostics</h3>
+              <button
+                onClick={runDebugCheck}
+                className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded text-sm"
               >
                 Refresh Debug
               </button>
@@ -404,30 +526,29 @@ const StakingInterface: React.FC = () => {
             
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <div className="bg-gray-800 p-4 rounded">
-                <h4 className="text-white font-semibold mb-2">Connection Status:</h4>
+                <h4 className="text-white font-semibold mb-2">Connection Info:</h4>
                 <div className="space-y-1 text-sm">
-                  <p className="text-gray-300">Status: {debugInfo.status || 'Not checked'}</p>
+                  <p className="text-gray-300">Status: {debugInfo.status}</p>
+                  <p className="text-gray-300">RPC: {debugInfo.rpcEndpoint?.split('/')[2] || 'Unknown'}</p>
                   <p className="text-gray-300">Wallet: {debugInfo.walletAddress?.slice(0, 12)}...</p>
-                  <p className="text-gray-300">JAO Mint: {debugInfo.mintAddress?.slice(0, 12)}...</p>
-                  <p className="text-gray-300">Expected ATA: {debugInfo.expectedATA?.slice(0, 12)}...</p>
                   <p className={`${debugInfo.ataExists ? 'text-green-400' : 'text-red-400'}`}>
-                    ATA Exists: {debugInfo.ataExists ? '✅' : '❌'}
+                    Token Account: {debugInfo.ataExists ? '✅ Found' : '❌ Not Found'}
                   </p>
                   <p className={`${debugInfo.jaoAccountFound ? 'text-green-400' : 'text-red-400'}`}>
-                    JAO Account Found: {debugInfo.jaoAccountFound ? '✅' : '❌'}
+                    JAO Token: {debugInfo.jaoAccountFound ? '✅ Found' : '❌ Not Found'}
                   </p>
                   <p className="text-yellow-400">JAO Balance: {debugInfo.jaoBalance || '0'}</p>
-                  <p className="text-gray-300">Total Token Accounts: {debugInfo.totalTokenAccounts}</p>
+                  <p className="text-gray-300">Total Tokens: {debugInfo.totalTokenAccounts || '0'}</p>
                 </div>
               </div>
 
               <div className="bg-gray-800 p-4 rounded">
-                <h4 className="text-white font-semibold mb-2">All Your Tokens:</h4>
+                <h4 className="text-white font-semibold mb-2">Your Tokens:</h4>
                 <div className="max-h-40 overflow-y-auto space-y-1">
                   {allTokenAccounts.length === 0 ? (
-                    <p className="text-gray-400 text-sm">No token accounts found</p>
+                    <p className="text-gray-400 text-sm">No tokens found</p>
                   ) : (
-                    allTokenAccounts.map((account, i) => (
+                    allTokenAccounts.slice(0, 10).map((account, i) => (
                       <div key={i} className="text-xs">
                         <div className="flex items-center justify-between">
                           <span className="text-gray-400">
@@ -438,20 +559,24 @@ const StakingInterface: React.FC = () => {
                           </span>
                         </div>
                         {account.account.data.parsed.info.mint === JAO_MINT_ADDRESS && (
-                          <div className="text-green-400 text-xs">↑ This is your JAO token! ✅</div>
+                          <div className="text-green-400 text-xs">↑ JAO Token ✅</div>
                         )}
                       </div>
                     ))
+                  )}
+                  {allTokenAccounts.length > 10 && (
+                    <p className="text-gray-400 text-xs">... and {allTokenAccounts.length - 10} more</p>
                   )}
                 </div>
               </div>
             </div>
 
-            {!debugInfo.jaoAccountFound && allTokenAccounts.length > 0 && (
+            {/* Smart suggestions based on debug info */}
+            {debugInfo.status === 'Complete' && !debugInfo.jaoAccountFound && allTokenAccounts.length > 0 && (
               <div className="mt-4 p-3 bg-yellow-900/30 border border-yellow-700 rounded">
                 <p className="text-yellow-200 text-sm">
-                  🤔 <strong>Issue Found:</strong> You have {allTokenAccounts.length} token(s) but none match the JAO mint address.
-                  Your JAO tokens might have a different mint address.
+                  🤔 <strong>Issue:</strong> You have {allTokenAccounts.length} token(s) but no JAO. 
+                  Check if you have the correct JAO mint address or need to acquire JAO tokens.
                 </p>
               </div>
             )}
@@ -459,7 +584,7 @@ const StakingInterface: React.FC = () => {
             {debugInfo.jaoAccountFound && debugInfo.jaoBalance === 0 && (
               <div className="mt-4 p-3 bg-blue-900/30 border border-blue-700 rounded">
                 <p className="text-blue-200 text-sm">
-                  ℹ️ <strong>Found JAO account but balance is 0.</strong> You have the right token but no balance.
+                  ℹ️ <strong>JAO account found but balance is 0.</strong> You need to acquire JAO tokens to start staking.
                 </p>
               </div>
             )}
@@ -567,7 +692,7 @@ const StakingInterface: React.FC = () => {
                     <div className="flex gap-2">
                       <button
                         onClick={() => handleStake(pool.id)}
-                        disabled={loading}
+                        disabled={loading || jaoBalance === 0}
                         className="flex-1 bg-gradient-to-r from-green-500 to-blue-600 text-white py-2 px-4 rounded-lg font-semibold hover:from-green-600 hover:to-blue-700 transition-all disabled:opacity-50"
                       >
                         {loading ? 'Processing...' : 'Stake Now'}
@@ -583,9 +708,10 @@ const StakingInterface: React.FC = () => {
                 ) : (
                   <button
                     onClick={() => setSelectedPool(pool.id)}
-                    className="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white py-3 px-6 rounded-lg font-semibold hover:from-blue-600 hover:to-purple-700 transition-all transform hover:scale-105"
+                    disabled={jaoBalance === 0}
+                    className="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white py-3 px-6 rounded-lg font-semibold hover:from-blue-600 hover:to-purple-700 transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Stake in this Pool
+                    {jaoBalance === 0 ? 'No JAO Balance' : 'Stake in this Pool'}
                   </button>
                 )}
               </div>
