@@ -1,12 +1,5 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User } from '@supabase/supabase-js';
-import { createClient } from '@supabase/supabase-js';
-
-// Create the Supabase client
-const supabase = createClient(
-  import.meta.env.VITE_REACT_APP_SUPABASE_URL,
-  import.meta.env.VITE_REACT_APP_SUPABASE_ANON_KEY
-);
+import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { supabase } from '../lib/supabase';
 
 interface Profile {
   id: string;
@@ -14,17 +7,15 @@ interface Profile {
   total_jao_balance: number;
   total_staked: number;
   total_rewards_earned: number;
+  // Add more fields if your 'profiles' table contains more.
 }
 
 interface AuthContextType {
-  user: User | null;
+  user: any | null;
   profile: Profile | null;
   loading: boolean;
-  signOut: () => Promise<{ error: Error | null }>;
-  updateProfile: (updates: Partial<Profile>) => Promise<{
-    data: Profile | null;
-    error: Error | null;
-  }>;
+  signOut: () => Promise<{ error: any | null }>;
+  updateProfile: (updates: Partial<Profile>) => Promise<{ data: Profile | null, error: any | null }>;
   fetchProfile: (userId: string) => Promise<void>;
 }
 
@@ -38,13 +29,16 @@ export const useAuth = () => {
   return context;
 };
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+interface AuthProviderProps {
+  children: ReactNode;
+}
+
+export const AuthProvider = ({ children }: AuthProviderProps) => {
+  const [user, setUser] = useState<any | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
   const [profile, setProfile] = useState<Profile | null>(null);
 
   useEffect(() => {
-    // Get initial session
     const getSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       setUser(session?.user || null);
@@ -56,11 +50,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     getSession();
 
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      async (_event: string, session: any) => {
         setUser(session?.user || null);
-        
+
         if (session?.user) {
           await fetchProfile(session.user.id);
         } else {
@@ -70,7 +63,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchProfile = async (userId: string) => {
@@ -126,8 +122,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const updateProfile = async (updates: Partial<Profile>) => {
     try {
-      if (!user) throw new Error('No user logged in');
-      
       const { data, error } = await supabase
         .from('profiles')
         .update(updates)
@@ -140,7 +134,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { data, error: null };
     } catch (error) {
       console.error('Error updating profile:', error);
-      return { data: null, error: error as Error };
+      return { data: null, error };
     }
   };
 
