@@ -1,6 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, ChangeEvent } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { User, LogOut, Edit3, Save, X } from 'lucide-react';
+import { User, Wallet, Settings, LogOut, Edit3, Save, X } from 'lucide-react';
+
+// Define interfaces for user and profile data
+interface Profile {
+  username?: string;
+  wallet_address?: string;
+  total_jao_balance?: number;
+  total_staked?: number;
+  total_rewards_earned?: number;
+}
+
+interface AuthUser {
+  email?: string;
+}
 
 interface EditData {
   username: string;
@@ -8,18 +21,23 @@ interface EditData {
 }
 
 const ProfileCard: React.FC = () => {
-  const { user, profile, signOut, updateProfile } = useAuth();
-  const [isEditing, setIsEditing] = useState(false);
+  const { user, profile, signOut, updateProfile } = useAuth() as {
+    user: AuthUser | null;
+    profile: Profile | null;
+    signOut: () => Promise<void>;
+    updateProfile: (data: EditData) => Promise<{ error?: string }>;
+  };
+
+  const [isEditing, setIsEditing] = useState<boolean>(false);
   const [editData, setEditData] = useState<EditData>({
     username: profile?.username || '',
     wallet_address: profile?.wallet_address || ''
   });
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<boolean>(false);
 
   const handleSave = async () => {
     setLoading(true);
     const { error } = await updateProfile(editData);
-    
     if (!error) {
       setIsEditing(false);
     }
@@ -36,6 +54,10 @@ const ProfileCard: React.FC = () => {
 
   const handleSignOut = async () => {
     await signOut();
+  };
+
+  const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
+    setEditData({ ...editData, [e.target.name]: e.target.value });
   };
 
   return (
@@ -78,7 +100,6 @@ const ProfileCard: React.FC = () => {
               </button>
             </div>
           )}
-          
           <button
             onClick={handleSignOut}
             className="p-2 hover:bg-red-500/20 rounded-lg transition-colors"
@@ -94,8 +115,9 @@ const ProfileCard: React.FC = () => {
           {isEditing ? (
             <input
               type="text"
+              name="username"
               value={editData.username}
-              onChange={(e) => setEditData({...editData, username: e.target.value})}
+              onChange={handleChange}
               className="w-full bg-white/20 border border-white/30 rounded-lg px-3 py-2 text-white placeholder-blue-200"
               placeholder="Enter username"
             />
@@ -109,8 +131,9 @@ const ProfileCard: React.FC = () => {
           {isEditing ? (
             <input
               type="text"
+              name="wallet_address"
               value={editData.wallet_address}
-              onChange={(e) => setEditData({...editData, wallet_address: e.target.value})}
+              onChange={handleChange}
               className="w-full bg-white/20 border border-white/30 rounded-lg px-3 py-2 text-white placeholder-blue-200 font-mono text-sm"
               placeholder="Connect your Solana wallet"
             />
