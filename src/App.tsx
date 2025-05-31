@@ -1,5 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { AuthProvider } from './contexts/AuthContext';
 import Layout from './components/layout/Layout';
 import HomePage from './pages/HomePage';
 import ProjectsPage from './pages/ProjectsPage';
@@ -9,25 +10,25 @@ import MerchPage from './pages/MerchPage';
 import BlogPage from './pages/BlogPage';
 import BlogPost from './pages/BlogPost';
 import ContactPage from './pages/ContactPage';
-import TestSupabase from './components/TestSupabase';
 
 function App() {
   return (
-    <Router>
-      <Layout>
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/projects" element={<ProjectsPage />} />
-          <Route path="/whitepaper" element={<WhitepaperPage />} />
-          <Route path="/social" element={<SocialHubPage />} />
-          <Route path="/merch" element={<MerchPage />} />
-          <Route path="/blog" element={<BlogPage />} />
-          <Route path="/blog/:id" element={<BlogPost />} />
-          <Route path="/contact" element={<ContactPage />} />
-        </Routes>
-        <TestSupabase />
-      </Layout>
-    </Router>
+    <AuthProvider>
+      <Router>
+        <Layout>
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/projects" element={<ProjectsPage />} />
+            <Route path="/whitepaper" element={<WhitepaperPage />} />
+            <Route path="/social" element={<SocialHubPage />} />
+            <Route path="/merch" element={<MerchPage />} />
+            <Route path="/blog" element={<BlogPage />} />
+            <Route path="/blog/:id" element={<BlogPost />} />
+            <Route path="/contact" element={<ContactPage />} />
+          </Routes>
+        </Layout>
+      </Router>
+    </AuthProvider>
   );
 }
 
