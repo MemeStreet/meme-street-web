@@ -7,7 +7,7 @@ const projects: Project[] = [
     description: 'The first anti-jeet token that stands against pump and dump culture. $JAO is designed to protect genuine holders and build a sustainable community.',
     image: '/images/IMAGE 2025-05-22 19:45:51.png',
     status: 'live',
-    url: 'https://pancakeswap.finance/swap',
+    url: 'https://dexscreener.com/solana/h4b45vgj5hlqmnujppaffy2z2uwry1xww8bvlom8lfgz',
   },
   {
     id: '2',
