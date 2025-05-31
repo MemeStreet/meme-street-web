@@ -57,7 +57,7 @@ const HomePage: React.FC = () => {
               className="flex flex-wrap gap-4"
             >
               <Button
-                href="https://pancakeswap.finance/swap"
+                href="https://dexscreener.com/solana/h4b45vgj5hlqmnujppaffy2z2uwry1xww8bvlom8lfgz"
                 target="_blank"
                 size="lg"
               >
@@ -253,7 +253,7 @@ const HomePage: React.FC = () => {
             className="flex flex-wrap justify-center gap-4"
           >
             <Button
-              href="https://pancakeswap.finance/swap"
+              href="https://dexscreener.com/solana/h4b45vgj5hlqmnujppaffy2z2uwry1xww8bvlom8lfgz"
               target="_blank"
               size="lg"
               variant="secondary"
