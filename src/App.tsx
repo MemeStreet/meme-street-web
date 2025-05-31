@@ -9,6 +9,7 @@ import MerchPage from './pages/MerchPage';
 import BlogPage from './pages/BlogPage';
 import BlogPost from './pages/BlogPost';
 import ContactPage from './pages/ContactPage';
+import TestSupabase from './components/TestSupabase';
 
 function App() {
   return (
@@ -24,6 +25,7 @@ function App() {
           <Route path="/blog/:id" element={<BlogPost />} />
           <Route path="/contact" element={<ContactPage />} />
         </Routes>
+        <TestSupabase />
       </Layout>
     </Router>
   );
